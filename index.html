@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mehrspieler-Spiele</title>
+<style>
+:root{--bg:#f6f4ef;--fg:#222;--mut:#777;--line:#cfcabd;--card:#fff;--board:#3b5fc0;--p0:#d94b4b;--p1:#e0a100;--p2:#2e9e4f;--p3:#2f6fd6;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181c;--fg:#eee;--mut:#9a9ca5;--line:#454752;--card:#22242a;--board:#34479a;--p0:#ff6b6b;--p1:#ffc533;--p2:#4ccd7a;--p3:#6aa0ff;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181c;--fg:#eee;--mut:#9a9ca5;--line:#454752;--card:#22242a;--board:#34479a;--p0:#ff6b6b;--p1:#ffc533;--p2:#4ccd7a;--p3:#6aa0ff;color-scheme:dark}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px;min-height:100vh}
+h1{font-size:1.3rem;margin:0}
+.view{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:420px}
+.hide{display:none}
+.bar{display:flex;gap:10px;width:100%}
+.pl{flex:1;background:var(--card);border:3px solid transparent;border-radius:12px;padding:8px;text-align:center;font-weight:600}
+.pl.on{border-color:currentColor}
+.pl span{display:block;font-size:1.4rem}
+.pl.c0{color:var(--p0)}.pl.c1{color:var(--p1)}.pl.c2{color:var(--p2)}.pl.c3{color:var(--p3)}
+svg{width:100%;touch-action:manipulation;background:var(--card);border-radius:14px}
+#msg{min-height:1.5em;font-weight:600;text-align:center}
+button{font:inherit;padding:12px 20px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);cursor:pointer}
+.big{width:100%;padding:22px;font-size:1.1rem}
+.row{display:flex;gap:10px}
+.rules{color:var(--mut);font-size:.85rem;line-height:1.4;text-align:center}
+#ms{flex-wrap:wrap;justify-content:center}
+#np button,#ms button{opacity:.45;min-width:56px}#np button.sel,#ms button.sel{opacity:1}
+</style>
+</head>
+<body>
+<h1>Mehrspieler-Spiele</h1>
+<div class="view" id="menu">
+  <button class="big" data-g="vg">Vier gewinnt</button>
+  <button class="big" data-g="kk">Käsekästchen</button>
+  <button class="big" data-g="mem">Memory mit Smileys</button>
+  <button class="big" data-g="iso">Isolation</button>
+  <div class="rules">Spieleranzahl:</div>
+  <div class="row" id="np"><button data-n="2" class="sel">2</button><button data-n="3">3</button><button data-n="4">4</button></div>
+  <div class="rules">Abwechselnd an einem Gerät spielen.</div>
+  <div class="rules">Memory-Größe (Spalten × Reihen):</div>
+  <div class="row" id="ms"><button data-s="3x4">3×4</button><button data-s="4x4" class="sel">4×4</button><button data-s="4x5">4×5</button><button data-s="6x6">6×6</button><button data-s="8x8">8×8</button><button data-s="10x10">10×10</button></div>
+</div>
+<div class="view hide" id="game">
+  <div class="bar" id="bar"></div>
+  <div id="msg"></div>
+  <svg id="b"></svg>
+  <div class="row"><button id="r">Neues Spiel</button><button id="m">Menü</button></div>
+  <div class="rules" id="rules"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const nm=['Rot','Gelb','Grün','Blau'];let np=2;
+let G,cur,score,over,win;
+// ---------- Vier gewinnt ----------
+const R=6,C=7,CS=50;
+let g;
+function vgInit(){
+  g=Array.from({length:R},()=>Array(C).fill(-1));
+  cur=0;over=false;win=[];score=Array(np).fill(0);
+  $('b').setAttribute('viewBox','0 0 350 300');
+  $('rules').textContent='Tippe auf eine Spalte, um einen Stein fallen zu lassen. Wer zuerst vier Steine in einer Reihe hat (waagerecht, senkrecht oder diagonal), gewinnt.';
+  vgDraw();
+}
+function vgFour(r,c,p){
+  for(const[d,e]of[[0,1],[1,0],[1,1],[1,-1]]){
+    const cells=[[r,c]];
+    for(const s of[1,-1]){
+      let y=r+d*s,x=c+e*s;
+      while(y>=0&&y<R&&x>=0&&x<C&&g[y][x]===p){cells.push([y,x]);y+=d*s;x+=e*s}
+    }
+    if(cells.length>=4)return cells;
+  }
+  return null;
+}
+function vgPlay(c){
+  if(over)return;
+  let r=R-1;while(r>=0&&g[r][c]>=0)r--;
+  if(r<0)return;
+  g[r][c]=cur;
+  const f=vgFour(r,c,cur);
+  if(f){win=f;over=true;score[cur]++;vgDraw('win');return}
+  if(g.every(row=>row.every(x=>x>=0))){over=true;vgDraw('draw');return}
+  cur=(cur+1)%np;vgDraw();
+}
+function vgDraw(end){
+  let s=`<rect x="0" y="0" width="350" height="300" rx="10" fill="var(--board)"/>`;
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const p=g[r][c],w=win.some(a=>a[0]===r&&a[1]===c);
+    s+=`<circle cx="${c*CS+25}" cy="${r*CS+25}" r="20" fill="${p>=0?`var(--p${p})`:'var(--card)'}"${w?' stroke="var(--fg)" stroke-width="4"':''}/>`;
+  }
+  for(let c=0;c<C;c++)s+=`<rect data-c="${c}" x="${c*CS}" y="0" width="${CS}" height="300" fill="transparent"/>`;
+  $('b').innerHTML=s;
+  status(end==='win'?nm[cur]+' gewinnt mit vier in einer Reihe!':end==='draw'?'Unentschieden!':null);
+}
+// ---------- Käsekästchen ----------
+const N=5,S=60,M=30;
+let h,v,o;
+function kkInit(){
+  h=Array.from({length:N+1},()=>Array(N).fill(-1));
+  v=Array.from({length:N},()=>Array(N+1).fill(-1));
+  o=Array.from({length:N},()=>Array(N).fill(-1));
+  cur=0;score=Array(np).fill(0);over=false;win=[];
+  $('b').setAttribute('viewBox','0 0 360 360');
+  $('rules').textContent='Tippe abwechselnd eine Linie zwischen zwei Punkten. Wer ein Kästchen schließt, bekommt es und darf nochmal. Am Ende gewinnt, wer die meisten Kästchen hat.';
+  kkDraw();
+}
+function boxDone(r,c){return h[r][c]>=0&&h[r+1][c]>=0&&v[r][c]>=0&&v[r][c+1]>=0}
+function kkPlay(t,r,c){
+  if(over)return;
+  const a=t==='h'?h:v;
+  if(a[r][c]>=0)return;
+  a[r][c]=cur;
+  let got=0;
+  for(const[y,x]of(t==='h'?[[r-1,c],[r,c]]:[[r,c-1],[r,c]])){
+    if(y>=0&&y<N&&x>=0&&x<N&&o[y][x]<0&&boxDone(y,x)){o[y][x]=cur;score[cur]++;got++}
+  }
+  if(!got)cur=(cur+1)%np;
+  if(score.reduce((a,b)=>a+b,0)===N*N){over=true;kkDraw('end');return}
+  kkDraw();
+}
+function kkDraw(end){
+  let s='';
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(o[r][c]>=0)s+=`<rect x="${M+c*S+6}" y="${M+r*S+6}" width="${S-12}" height="${S-12}" rx="8" fill="var(--p${o[r][c]})" opacity=".85"/>`;
+  const ln=(t,r,c,x1,y1,x2,y2,p)=>{
+    let x=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${p>=0?`var(--p${p})`:'var(--line)'}" stroke-width="${p>=0?7:3}" stroke-linecap="round"/>`;
+    if(p<0)x+=`<line data-t="${t}" data-r="${r}" data-c="${c}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="transparent" stroke-width="30"/>`;
+    return x;
+  };
+  for(let r=0;r<=N;r++)for(let c=0;c<N;c++)s+=ln('h',r,c,M+c*S,M+r*S,M+c*S+S,M+r*S,h[r][c]);
+  for(let r=0;r<N;r++)for(let c=0;c<=N;c++)s+=ln('v',r,c,M+c*S,M+r*S,M+c*S,M+r*S+S,v[r][c]);
+  for(let r=0;r<=N;r++)for(let c=0;c<=N;c++)s+=`<circle cx="${M+c*S}" cy="${M+r*S}" r="5" fill="var(--fg)"/>`;
+  $('b').innerHTML=s;
+  status(end?kkResult():null);
+}
+// ---------- Memory ----------
+const SM=['😀','😂','😍','😎','🥳','😴','🤔','😡','😱','🥰','😇','🤪','😭','😋','🤓','🥶','😈','🤠','😁','🙃','😉','😘','😜','🤩','😏','😒','😔','😢','😤','🤯','😳','🥵','🤗','🤭','😬','🙄','😮','🥱','🤤','🤢','🤮','🤧','😷','🤒','🤑','🤡','👻','💀','👽','🤖'];
+let ms='4x4',mc,mr,cards,fl,lock;
+function memInit(){
+  [mc,mr]=ms.split('x').map(Number);
+  const n=mc*mr/2,a=SM.slice(0,n).flatMap(x=>[x,x]);
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
+  cards=a.map(f=>({f,up:false,own:-1}));
+  fl=[];lock=false;cur=0;over=false;win=[];score=Array(np).fill(0);
+  $('rules').textContent='Decke zwei Karten auf. Passen die Smileys zusammen, bekommst du das Paar und darfst nochmal. Wer am Ende die meisten Paare hat, gewinnt.';
+  memDraw();
+}
+function memPlay(i){
+  if(over||lock||cards[i].up||cards[i].own>=0)return;
+  cards[i].up=true;fl.push(i);
+  if(fl.length<2){memDraw();return}
+  const[a,b]=fl;
+  if(cards[a].f===cards[b].f){
+    cards[a].own=cards[b].own=cur;score[cur]++;fl=[];
+    if(score.reduce((x,y)=>x+y,0)===cards.length/2)over=true;
+    memDraw(over);
+  }else{
+    lock=true;memDraw();
+    setTimeout(()=>{cards[a].up=cards[b].up=false;fl=[];cur=(cur+1)%np;lock=false;memDraw()},1000);
+  }
+}
+function memDraw(end){
+  const cs=360/mc,gap=4;
+  $('b').setAttribute('viewBox',`0 0 360 ${cs*mr}`);
+  let s='';
+  cards.forEach((k,i)=>{
+    const x=(i%mc)*cs+gap/2,y=Math.floor(i/mc)*cs+gap/2,w=cs-gap;
+    const show=k.up||k.own>=0;
+    s+=`<rect data-i="${i}" x="${x}" y="${y}" width="${w}" height="${w}" rx="${Math.min(10,w/5)}" fill="${show?'var(--card)':'var(--board)'}" stroke="${k.own>=0?`var(--p${k.own})`:'var(--line)'}" stroke-width="${k.own>=0?Math.min(5,w/8):2}"/>`;
+    if(show)s+=`<text data-i="${i}" x="${x+w/2}" y="${y+w/2}" font-size="${w*0.55}" text-anchor="middle" dominant-baseline="central">${k.f}</text>`;
+  });
+  $('b').innerHTML=s;
+  status(end?memResult():null);
+}
+function memResult(){const m=Math.max(...score),w=score.map((x,i)=>x===m?i:-1).filter(i=>i>=0);return w.length>1?'Unentschieden zwischen '+w.map(i=>nm[i]).join(' und ')+'!':nm[w[0]]+' gewinnt mit den meisten Paaren!'}
+// ---------- Isolation ----------
+const IN=7;let ib,ip,ia,iph;
+function isoInit(){
+  ib=Array.from({length:IN},()=>Array(IN).fill(false));
+  const st=[[6,3],[0,3],[3,0],[3,6]];
+  ip=st.slice(0,np).map(a=>a.slice());ia=Array(np).fill(true);
+  cur=0;over=false;win=[];iph='move';score=Array(np).fill(0);
+  $('b').setAttribute('viewBox','0 0 360 360');
+  $('rules').textContent='Du ziehst deine Figur ein Feld weit nach oben, unten, links oder rechts (nicht diagonal). Das Feld, das du verlassen hast, wird gesperrt. Wer sich nicht mehr bewegen kann, scheidet aus. Wer zuletzt übrig bleibt, gewinnt. Die Zahl oben zeigt deine Zugmöglichkeiten.';
+  isoDraw();
+}
+function isoFree(r,c){return r>=0&&r<IN&&c>=0&&c<IN&&!ib[r][c]&&!ip.some(p=>p[0]===r&&p[1]===c)}
+function isoMoves(p){const[r,c]=ip[p],m=[];for(const[a,d]of[[-1,0],[1,0],[0,-1],[0,1]])if(isoFree(r+a,c+d))m.push([r+a,c+d]);return m}
+function isoNext(){
+  iph='move';
+  for(let k=0;k<np*2;k++){
+    if(ia.filter(Boolean).length<=1){over=true;win=[ia.indexOf(true)];return}
+    cur=(cur+1)%np;
+    if(!ia[cur])continue;
+    if(isoMoves(cur).length)return;
+    ia[cur]=false;
+  }
+}
+function isoClick(r,c){
+  if(over)return;
+  if(!isoMoves(cur).some(m=>m[0]===r&&m[1]===c))return;
+  const old=ip[cur];ib[old[0]][old[1]]=true;ip[cur]=[r,c];isoNext();
+  isoDraw();
+}
+function isoDraw(){
+  const cs=360/IN,mv=!over&&iph==='move'?isoMoves(cur):[];
+  let s='';
+  for(let r=0;r<IN;r++)for(let c=0;c<IN;c++){
+    const bl=ib[r][c],hl=!over&&iph==='block'&&isoFree(r,c);
+    s+=`<rect data-r="${r}" data-c="${c}" x="${c*cs+2}" y="${r*cs+2}" width="${cs-4}" height="${cs-4}" rx="6" fill="${bl?'var(--mut)':'var(--card)'}" stroke="${hl?`var(--p${cur})`:'var(--line)'}" stroke-width="${hl?3:2}"${bl?' opacity=".6"':''}/>`;
+  }
+  mv.forEach(m=>{s+=`<circle data-r="${m[0]}" data-c="${m[1]}" cx="${m[1]*cs+cs/2}" cy="${m[0]*cs+cs/2}" r="${cs*0.14}" fill="var(--p${cur})" opacity=".6"/>`});
+  ip.forEach((p,i)=>{
+    s+=`<circle data-r="${p[0]}" data-c="${p[1]}" cx="${p[1]*cs+cs/2}" cy="${p[0]*cs+cs/2}" r="${cs*0.32}" fill="var(--p${i})" opacity="${ia[i]?1:.35}"/>`;
+    if(!ia[i])s+=`<text data-r="${p[0]}" data-c="${p[1]}" x="${p[1]*cs+cs/2}" y="${p[0]*cs+cs/2}" font-size="${cs*0.4}" text-anchor="middle" dominant-baseline="central" fill="var(--fg)">✖</text>`;
+  });
+  $('b').innerHTML=s;
+  score=ip.map((_,i)=>ia[i]?isoMoves(i).length:0);
+  status(over?nm[win[0]]+' gewinnt, alle anderen sind eingesperrt!':nm[cur]+': Zieh deine Figur');
+}
+// ---------- Gemeinsam ----------
+function kkResult(){const m=Math.max(...score),w=score.map((x,i)=>x===m?i:-1).filter(i=>i>=0);return w.length>1?'Unentschieden zwischen '+w.map(i=>nm[i]).join(' und ')+'!':nm[w[0]]+' gewinnt mit den meisten Kästchen!'}
+function status(endMsg){
+  $('bar').innerHTML=nm.slice(0,np).map((n,i)=>`<div class="pl c${i}${!over&&cur===i?' on':''}">${n}<span>${score[i]}</span></div>`).join('');
+  $('msg').textContent=endMsg||nm[cur]+' ist dran';
+}
+function start(x){
+  G=x;$('menu').classList.add('hide');$('game').classList.remove('hide');
+  x==='vg'?vgInit():x==='kk'?kkInit():x==='mem'?memInit():isoInit();
+}
+document.querySelectorAll('[data-g]').forEach(btn=>btn.addEventListener('click',()=>start(btn.dataset.g)));
+document.querySelectorAll('#np button').forEach(btn=>btn.addEventListener('click',()=>{np=+btn.dataset.n;document.querySelectorAll('#np button').forEach(x=>x.classList.toggle('sel',x===btn))}));
+document.querySelectorAll('#ms button').forEach(btn=>btn.addEventListener('click',()=>{ms=btn.dataset.s;document.querySelectorAll('#ms button').forEach(x=>x.classList.toggle('sel',x===btn))}));
+$('r').addEventListener('click',()=>start(G));
+$('m').addEventListener('click',()=>{$('game').classList.add('hide');$('menu').classList.remove('hide')});
+$('b').addEventListener('click',e=>{
+  const d=e.target.dataset;
+  if(G==='vg'&&d.c!==undefined)vgPlay(+d.c);
+  else if(G==='kk'&&d.t)kkPlay(d.t,+d.r,+d.c);
+  else if(G==='mem'&&d.i!==undefined)memPlay(+d.i);
+  else if(G==='iso'&&d.c!==undefined)isoClick(+d.r,+d.c);
+});
+</script>
+</body>
+</html>
