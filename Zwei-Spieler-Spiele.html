@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zwei-Spieler-Spiele</title>
+<style>
+:root{--bg:#f6f4ef;--fg:#222;--mut:#777;--line:#cfcabd;--card:#fff;--board:#3b5fc0;--p0:#d94b4b;--p1:#e0a100;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181c;--fg:#eee;--mut:#9a9ca5;--line:#454752;--card:#22242a;--board:#34479a;--p0:#ff6b6b;--p1:#ffc533;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17181c;--fg:#eee;--mut:#9a9ca5;--line:#454752;--card:#22242a;--board:#34479a;--p0:#ff6b6b;--p1:#ffc533;color-scheme:dark}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px;min-height:100vh}
+h1{font-size:1.3rem;margin:0}
+.view{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:420px}
+.hide{display:none}
+.bar{display:flex;gap:10px;width:100%}
+.pl{flex:1;background:var(--card);border:3px solid transparent;border-radius:12px;padding:8px;text-align:center;font-weight:600}
+.pl.on{border-color:currentColor}
+.pl span{display:block;font-size:1.4rem}
+#p0{color:var(--p0)}#p1{color:var(--p1)}
+svg{width:100%;touch-action:manipulation;background:var(--card);border-radius:14px}
+#msg{min-height:1.5em;font-weight:600;text-align:center}
+button{font:inherit;padding:12px 20px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);cursor:pointer}
+.big{width:100%;padding:22px;font-size:1.1rem}
+.row{display:flex;gap:10px}
+.rules{color:var(--mut);font-size:.85rem;line-height:1.4;text-align:center}
+</style>
+</head>
+<body>
+<h1>Zwei-Spieler-Spiele</h1>
+<div class="view" id="menu">
+  <button class="big" data-g="vg">Vier gewinnt</button>
+  <button class="big" data-g="kk">Käsekästchen</button>
+  <div class="rules">Abwechselnd an einem Gerät spielen.</div>
+</div>
+<div class="view hide" id="game">
+  <div class="bar"><div class="pl" id="p0">Rot<span id="s0">0</span></div><div class="pl" id="p1">Gelb<span id="s1">0</span></div></div>
+  <div id="msg"></div>
+  <svg id="b"></svg>
+  <div class="row"><button id="r">Neues Spiel</button><button id="m">Menü</button></div>
+  <div class="rules" id="rules"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const nm=['Rot','Gelb'];
+let G,cur,score,over,win;
+// ---------- Vier gewinnt ----------
+const R=6,C=7,CS=50;
+let g;
+function vgInit(){
+  g=Array.from({length:R},()=>Array(C).fill(-1));
+  cur=0;over=false;win=[];score=[0,0];
+  $('b').setAttribute('viewBox','0 0 350 300');
+  $('rules').textContent='Tippe auf eine Spalte, um einen Stein fallen zu lassen. Wer zuerst vier Steine in einer Reihe hat (waagerecht, senkrecht oder diagonal), gewinnt.';
+  vgDraw();
+}
+function vgFour(r,c,p){
+  for(const[d,e]of[[0,1],[1,0],[1,1],[1,-1]]){
+    const cells=[[r,c]];
+    for(const s of[1,-1]){
+      let y=r+d*s,x=c+e*s;
+      while(y>=0&&y<R&&x>=0&&x<C&&g[y][x]===p){cells.push([y,x]);y+=d*s;x+=e*s}
+    }
+    if(cells.length>=4)return cells;
+  }
+  return null;
+}
+function vgPlay(c){
+  if(over)return;
+  let r=R-1;while(r>=0&&g[r][c]>=0)r--;
+  if(r<0)return;
+  g[r][c]=cur;
+  const f=vgFour(r,c,cur);
+  if(f){win=f;over=true;score[cur]++;vgDraw('win');return}
+  if(g.every(row=>row.every(x=>x>=0))){over=true;vgDraw('draw');return}
+  cur=1-cur;vgDraw();
+}
+function vgDraw(end){
+  let s=`<rect x="0" y="0" width="350" height="300" rx="10" fill="var(--board)"/>`;
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const p=g[r][c],w=win.some(a=>a[0]===r&&a[1]===c);
+    s+=`<circle cx="${c*CS+25}" cy="${r*CS+25}" r="20" fill="${p>=0?`var(--p${p})`:'var(--card)'}"${w?' stroke="var(--fg)" stroke-width="4"':''}/>`;
+  }
+  for(let c=0;c<C;c++)s+=`<rect data-c="${c}" x="${c*CS}" y="0" width="${CS}" height="300" fill="transparent"/>`;
+  $('b').innerHTML=s;
+  status(end==='win'?nm[cur]+' gewinnt mit vier in einer Reihe!':end==='draw'?'Unentschieden!':null);
+}
+// ---------- Käsekästchen ----------
+const N=5,S=60,M=30;
+let h,v,o;
+function kkInit(){
+  h=Array.from({length:N+1},()=>Array(N).fill(-1));
+  v=Array.from({length:N},()=>Array(N+1).fill(-1));
+  o=Array.from({length:N},()=>Array(N).fill(-1));
+  cur=0;score=[0,0];over=false;win=[];
+  $('b').setAttribute('viewBox','0 0 360 360');
+  $('rules').textContent='Tippe abwechselnd eine Linie zwischen zwei Punkten. Wer ein Kästchen schließt, bekommt es und darf nochmal. Am Ende gewinnt, wer die meisten Kästchen hat.';
+  kkDraw();
+}
+function boxDone(r,c){return h[r][c]>=0&&h[r+1][c]>=0&&v[r][c]>=0&&v[r][c+1]>=0}
+function kkPlay(t,r,c){
+  if(over)return;
+  const a=t==='h'?h:v;
+  if(a[r][c]>=0)return;
+  a[r][c]=cur;
+  let got=0;
+  for(const[y,x]of(t==='h'?[[r-1,c],[r,c]]:[[r,c-1],[r,c]])){
+    if(y>=0&&y<N&&x>=0&&x<N&&o[y][x]<0&&boxDone(y,x)){o[y][x]=cur;score[cur]++;got++}
+  }
+  if(!got)cur=1-cur;
+  if(score[0]+score[1]===N*N){over=true;kkDraw('end');return}
+  kkDraw();
+}
+function kkDraw(end){
+  let s='';
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(o[r][c]>=0)s+=`<rect x="${M+c*S+6}" y="${M+r*S+6}" width="${S-12}" height="${S-12}" rx="8" fill="var(--p${o[r][c]})" opacity=".85"/>`;
+  const ln=(t,r,c,x1,y1,x2,y2,p)=>{
+    let x=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${p>=0?`var(--p${p})`:'var(--line)'}" stroke-width="${p>=0?7:3}" stroke-linecap="round"/>`;
+    if(p<0)x+=`<line data-t="${t}" data-r="${r}" data-c="${c}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="transparent" stroke-width="30"/>`;
+    return x;
+  };
+  for(let r=0;r<=N;r++)for(let c=0;c<N;c++)s+=ln('h',r,c,M+c*S,M+r*S,M+c*S+S,M+r*S,h[r][c]);
+  for(let r=0;r<N;r++)for(let c=0;c<=N;c++)s+=ln('v',r,c,M+c*S,M+r*S,M+c*S,M+r*S+S,v[r][c]);
+  for(let r=0;r<=N;r++)for(let c=0;c<=N;c++)s+=`<circle cx="${M+c*S}" cy="${M+r*S}" r="5" fill="var(--fg)"/>`;
+  $('b').innerHTML=s;
+  status(end?(score[0]===score[1]?'Unentschieden!':(score[0]>score[1]?'Rot':'Gelb')+' gewinnt mit den meisten Kästchen!'):null);
+}
+// ---------- Gemeinsam ----------
+function status(endMsg){
+  $('s0').textContent=score[0];$('s1').textContent=score[1];
+  $('p0').classList.toggle('on',!over&&cur===0);$('p1').classList.toggle('on',!over&&cur===1);
+  $('msg').textContent=endMsg||nm[cur]+' ist dran';
+}
+function start(x){
+  G=x;$('menu').classList.add('hide');$('game').classList.remove('hide');
+  x==='vg'?vgInit():kkInit();
+}
+document.querySelectorAll('[data-g]').forEach(btn=>btn.addEventListener('click',()=>start(btn.dataset.g)));
+$('r').addEventListener('click',()=>start(G));
+$('m').addEventListener('click',()=>{$('game').classList.add('hide');$('menu').classList.remove('hide')});
+$('b').addEventListener('click',e=>{
+  const d=e.target.dataset;
+  if(G==='vg'&&d.c!==undefined)vgPlay(+d.c);
+  else if(G==='kk'&&d.t)kkPlay(d.t,+d.r,+d.c);
+});
+</script>
+</body>
+</html>
